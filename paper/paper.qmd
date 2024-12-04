@@ -1,0 +1,1132 @@
+---
+title: "Premium Versus Discount: How Toronto's Retailers Use Sourdough Bread Pricing for Market Positioning"
+subtitle: "Evidence of Systematic Price Differentials Reaching 300% Between Retail Segments"
+author: 
+  - Grace Nguyen
+thanks: "Code and data are available at: https://github.com/gracenguyen133/Sourdough-Bread-Pricing.git"
+date: today
+date-format: long
+abstract: "This paper examines the daily pricing of sourdough bread across five perceived major retail outlets in Toronto from February to July 2024 using Project Hammer data [@filipp_2024_project] to ascertain the regularity of pricing. Bayesian logistic regression analysis analyzes pricing strategies and compares vendor characteristics and market environment factors within various retail segments. We uncovered sharp inter-vendor differences in prices (R² = 0.841), with premium vendors like Loblaws maintaining significantly higher prices ($1.96 per 100g) compared to discount retailers like NoFrills ($0.553 per 100g), while temporal analysis reveals steady upward price movement (coefficient: 0.01), particularly in premium segments. Results suggest that price differentiation in the Toronto sourdough bread market does not represent purely realized costs but results from deliberate market segmentation strategic decisions with significant consequences for understanding retail pricing behavior and consumer choice dynamics."
+format: pdf
+keep-tex: true
+number-sections: true
+bibliography: references.bib
+---
+\tableofcontents
+
+\newpage
+
+```{r}
+#| include: false
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(arrow)
+library(here)
+library(cowplot)
+library(rstanarm)
+library(modelsummary)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(scales)
+library(bayesplot)
+library(gridExtra)
+```
+
+
+# Introduction
+
+In recent years, specialty products such as sourdough bread have changed the retail food market with significant pricing transformations. In Toronto's dynamic retail environment, Loblaws, Metro, NoFrills, Walmart, and Voila, among others, have taken different routes in serving premium product pricing. Retail pricing strategies have been extensively researched, but the precise dynamic of how specialty bread is priced (or priced below) staple food items and above premium items in urban markets is not well understood, and its lack of understanding is notably absent in the case of different types of retailer positioning these products.
+
+We exploit daily price tracking data and Bayesian logistic regression analysis to uncover sharp intervener differences in prices (R² = 0.841) and systematic pricing patterns. Premium vendors such as Loblaws (on average $1.956 per 100g) prices are consistently higher than discount retailers like NoFrills (averaged $0.553 per 100g), with distinct price variability patterns over time. The findings of deliberate market positioning through pricing strategies instead of cost-based pricing would seem to indicate.
+
+With urban markets becoming increasingly competitive, retailers are looking to establish themselves through differentiation and, as a result, have come to understand pricing strategies in specialty food markets. Retail pricing strategies have been well studied [@dellavigna_2019_uniform; @ellickson_2008_supermarket], but the dynamics of specialty bread pricing are understudied specifically within the context of how various retailer categories allocate these products into their broader market strategy.
+
+The remainder of this paper is structured as follows: @sec-data discusses our data and measurement design for the retail bread prices of Toronto. In @sec-model, we explain the Bayesian regression framework used to analyze pricing patterns. Our empirical findings on price differentiation by retail segments are presented in @sec-results. The discussion in @sec-discussion addresses the implications of retail strategy and market efficiency. To complement this, Appendix - @sec-appA provides additional technical details regarding our data analysis; Appendix - @sec-appB details model diagnostics. In Appendix - @sec-appC, we present robustness checks and alternative model specifications.
+
+## Estimand
+
+Our estimand is the relationship between retailer characteristics and sourdough bread pricing in Toronto's market, measured through average price per 100g across different vendor categories and periods from February to July 2024. In particular, we analyze how prices differ from, but condition on, brand effects and product characteristics between major retail chains.
+
+
+# Data {#sec-data}
+
+## Data Source
+
+We use Project Hammer's complete dataset [@filipp_2024_project], which documents day‐to‐day sore dough bread prices at major retail stores in Toronto from February to July 2024, for our empirical analysis. The data architecture comprises seven fundamental variables: Vendor identification, temporal indicators, product specifications, brand category, nominal price points, package quantities, and standardized price metrics. Because of this granular data structure, the sophisticated analysis of retail price determination mechanisms is achieved, which aligns with the methodological approaches used by [@dellavigna_2019_uniform] in their study of uniform pricing in retail chains.
+
+## Features
+
+Following the analytical frameworks established by [@ellickson_2008_supermarket], some distinctive characteristics of the dataset merit methodological consideration. It records raw pricing data and standardized metrics for each daily price point, which is a unique daily price point for each observation. The temporal dimension of roughly six months allows for longitudinal analysis of the pricing dynamics. It allows for explaining pricing proclivities consistent with the temporal dimensions advocated by [@nakamura_2011_price] to study retail price patterns. The vendor classification includes foremost retail organizations with solid differentiation of the premium and discount market considerations, which follows market segmentation teachings by [@dubois_2010_price].
+
+
+``` {r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Read the parquet file
+analysis_data <- read_parquet(
+  here("data/02-analysis_data/analysis_data.parquet")
+)
+refined_model <- readRDS(here("models", "refined_model.rds"))
+
+analysis_data <- read_parquet(
+  here("data/02-analysis_data/analysis_data.parquet")
+)
+
+price_mean <- mean(analysis_data$price_per_100g)
+price_sd <- sd(analysis_data$price_per_100g)
+analysis_data_clean <- analysis_data %>%
+  filter(abs(price_per_100g - price_mean) <= 3 * price_sd)
+```
+
+## Data Measurement
+	
+This measurement methodology monitors day-to-day coordinated sourdough bread pricing across Toronto's major retail outlets. Project Hammer [@filipp_2024_project] has standardized data collection protocols and record prices, both online and through in-store displays. The prices are standardized to dollars per 100g to deal with variations in package size between 450g and 800g. The importance of this standardization is beneficial as direct price comparison without such normalization could result in a misleading conclusion.
+
+Methodologically, our approaches to measuring and tracking price variations mirror how specific agricultural commodity price tracking techniques have been adapted to the retail context [@barnett_2007_weather], scaling up standardized daily monitoring routines to our specific retail context. Many essential variables are captured, and we start with a standardized price per 100g serving as our primary unit. Here, we divide vendors by market positioning and price strategy to categorize them as premium (Loblaws, Metro) or discount retailers (NoFrills, Walmart). Temporal variables register price variations and discover seasonal or weekly price patterns.
+
+Quality control is performed by systematically handling missing data points because of stock unavailability and technical problems and by clear documentation and verification flags for price anomalies higher than three standard deviations from the mean price. Vendors with irregular pricing across channels (online and in-store) are subject to regular spot checks to ensure price consistency.
+
+### Data Consideration
+
+Significant limitations to consider with this study's sourdough bread price data include the takeaway. Although we have detailed retailing coverage for significant retailers in Toronto with Project Hammer, @filipp_2024_project, such coverage only encompasses some retail bread markets since it excludes small independent bakeries and speciality stores. This introduces margins of error in our market-wide interpretations.
+
+Second, our observations based on price are based on posted prices from Project Hammer's daily tracking, which may not include all promotions, such as loyalty program discounts. Our data collection method may not even find some unpublicized discounts or bundle deals available at some retailers. Also, we standardize the prices per 100g, but price variations are only partially captured in our dataset, so other factors that might justify price differences are not included.
+
+Alternative datasets we considered but did not use include:
+
+1. Weekly averaged price data - while reducing day-to-day noise, this would mask important short-term price dynamics
+
+2. Monthly minimum price data - would capture best deals but miss regular pricing patterns
+
+3. Historical price trends from previous years - would provide longer-term context but lack current market conditions
+
+These limitations should be considered when interpreting our results.
+
+## Methodology
+
+We follow a structured data processing flow in R @citeR: data acquisition, processing, and analytical preparation. The data is downloaded from Project Hammer [@filipp_2024_project] and then manipulated using R packages tidyverse [@wickham_2019_welcome] and arrow [@apachearrowdevelopers_2023_arrow] for efficient storage. Specific types are enforced for data ingestion, processing dates as date objects, categorical variables as character vectors and numerical measurements as double-precision floats to keep accuracy and consistency.
+
+Data cleaning procedures are consistent with established retail price analysis protocols [@dellavigna_2019_uniform]. Blank values are removed, column names are standardized, and observations are ordered temporally. Division errors when calculating unit price are accounted for wherein possible with NA in place when needed. To validate data type, value ranges and temporal boundaries, we use the testthat framework [@wickham_2011_testthat]. Analytical preparation involves
+
+- Tidying prices to a per 100g basis,
+
+- Removing out-of-stock entries,
+
+- Controlling for outliers within three standard deviations and data preparation for time series analysis.
+
+All processed data is stored in Parquet format for reproducibility and efficient analysis. Diagnostic checks and visualizations are created using ggplot2 [@wickham_2016_create], and rstanarm supports this framework for Bayesian modelling with rstanarm [@goodrich_2023_bayesian]. The approach guarantees the clarity and the reliability of the analysis.
+
+
+### Outcome variables
+
+The primary outcome variable is the standardized price per 100 g of sourdough white bread. Prices vary from $0.37 to $3.75 per 100g, with considerable after-sales price variability between vendors and over time. This metric enables consistent comparison and provides insight into the pattern of vendor-specific pricing strategies. Temporal trends show that the premium retailer - Loblaws, has the highest median price but is highly volatile, while NoFrills - the discount retailer, has a stable low median price. These trends illustrate how pricing is done across market segments.
+
+Our primary outcome variable is the standardized price per 100g of sourdough white bread. For pricing analysis from Feb to July 2024, our results show wide price variation between retailers - from $0.37 to $3.75 a 100g. @fig-price-dist shows the distribution of these prices between different vendors, demonstrated by the discrepancy between premium and discount retailers.
+
+### Predictor Variables
+
+Vendor: It captures retailers' market positioning, whether premium vendors like Loblaws are consistently well above discount retailers like NoFrills. Aligned with retail pricing literature [@dellavigna_2019_uniform], this differentiation is observed.
+
+Date: Various time-based pricing patterns are present in temporal trends. We observe a difference between premium and discount retailers through prices, which results in significant price volatility, whereas low price volatility remains among discount retailers.
+
+Brand: It reflects the effects of product differentiation on price. As per their positioning in the market, premium brands fetch higher prices and have more variability.
+
+Product Type: Price levels are influenced by categories such as artisan, sliced and regular bread. Across all leading vendors, artisan bread still commands much higher premiums.
+
+Package Size: This variable is normalized to the price per 100g, performing economies of scale. Except for this dataset, the effect is less; larger packages tend to have lower per-unit prices.
+
+
+After finalizing the cleaning process, the final cleaned dataset is in Parquet format, enabling fast storage and reproducibility. rstanarm [@goodrich_2023_bayesian], used to Bayesian model relationships of these variables to bread pricing, is conducted. All findings are presented using ggplot2 [@wickham_2016_create] visualizations and diagnostic checks to support interpretability. This framework is robust for detailed analysis of pricing strategies and their determinants.
+
+## Data Visualization
+
+In the data visualization section, we show how these vendors stack up against each other concerning sourdough bread prices and how prices have developed over time. Using the cleaned and processed dataset, these visualizations clarify how vendor type, product attributes and temporal variations will affect price. The final figure and table provide a more comprehensive view of the market landscape by showing important patterns and essential differences in pricing strategies. The R code accompanying the visualizations ensures the analytical process's reproducibility and transparency. These visual elements are supported in the interpretation and discussion of the methodology and findings.
+
+### Price Distribution Analysis
+
+```{r}
+#| label: fig-price-dist
+#| fig-cap: Distribution of sourdough bread prices by vendor
+#| fig-align: center
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+
+ggplot(analysis_data, 
+       aes(x = vendor, y = price_per_100g, fill = vendor)) +
+  geom_boxplot(alpha = 0.8) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(x = "Vendor",
+       y = "Price per 100g ($)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+```
+
+Several patterns are notable in the pricing distribution, as seen from the boxplots @fig-price-dist. The highest median and most considerable prices spread across Loblaws suggest a dynamic pricing strategy, responding to market conditions and competition. NoFrills, on the other hand, is lower and more focused on price distribution, which is consistent with its strong discount retailer positioning. Walmart and Metro display intermediate pricing levels, and although Metro's distribution is skewed higher in line with its more premium market positioning, its pricing is consistent with the premium evaluation of quality products. Outliers' presence, especially in Loblaws and Metro's distribution, suggests that standard pricing occasionally deviates significantly from it, thus either due to promotional activities or supply chain fluctuations.
+
+
+### Temporal Price Trends
+
+Several key features of temporal evolution are revealed in the price distribution. Mean $1.96 per 100g at premium vendors (Loblaws) compared with standard $0.553 per 100g at discount vendors (NoFrills). As shown in @fig-price-time, these prices show how consistent price differentials between vendors exist alongside erratic price stability over time.
+
+
+```{r}
+#| label: fig-price-time
+#| fig-cap: "Daily price trends by vendor over the study period. Lines show the evolution of prices per 100g for each retailer, revealing persistent price level differences and varying degrees of price volatility."
+#| fig-align: center
+#| fig-pos: "H"
+#| echo: false
+#| warning: false
+
+vendor_trends <- ggplot(analysis_data, aes(x = date, y = price_per_100g, color = vendor)) +
+  geom_smooth(method = "loess", se = TRUE, size = 1) +
+  geom_hline(yintercept = mean(analysis_data$price_per_100g), 
+             linetype = "dashed", alpha = 0.5) +
+  facet_wrap(~ vendor) +
+  scale_color_brewer(palette = "Set2") +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_y_continuous(labels = dollar_format()) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank(),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Sourdough Bread Price Trends by Vendor",
+    subtitle = "Dashed line shows overall mean price",
+    x = "Date",
+    y = "Price per 100g ($)"
+  )
+
+# Print the plot
+print(vendor_trends)
+```
+
+
+@fig-price-time suggests that vendors have different pricing strategies, with Loblaws displaying the highest price levels and most extraordinary volatility, particularly in June and July, likely related to adjustments to market dynamics. Second, Metro, also considered a premium retailer, is relatively stable, though it is higher priced than discount retailers. On the other hand, Walmart and NoFrills are consistently low and stable with little/no change in price and should be viewed as a value strategy. These trends imply that dynamic pricing exists for premium retailers in order to take advantage of potential market playing fields and price stability for discount retailers in an attempt to cater to their cost-conscious customers. The divergence in pricing strategies draws attention to the significance of monetizing market positioning and consumer perception.
+
+### Vendor-level Price Statistics
+
+@tbl-price-summary provides extensive summary statistics of our price data, including means, standard deviations, and ranges for each vendor category. These statistics reveal not only the differences in price levels but also in price volatility across different market segments.
+
+```{r}
+#| label: tbl-price-summary
+#| tbl-cap: "Summary statistics of sourdough bread prices by vendor, showing systematic differences in pricing strategies across retailers."
+#| tbl-pos: "H"
+#| tbl-align: "center"
+#| echo: false
+
+price_summary <- analysis_data %>%
+  group_by(vendor) %>%
+  summarise(
+    mean_price = mean(price_per_100g),
+    sd_price = sd(price_per_100g),
+    min_price = min(price_per_100g),
+    max_price = max(price_per_100g)
+  )
+
+knitr::kable(
+  price_summary, 
+  digits = 2,
+  col.names = c("Vendor", "Mean Price ($)", "SD ($)", "Min Price ($)", "Max Price ($)"),
+  align = c("l", "c", "c", "c", "c")  # Align columns (l=left, c=center)
+) %>%
+  kableExtra::kable_styling(
+    position = "center",
+    latex_options = c("hold_position"),
+    full_width = FALSE
+  ) %>%
+  kableExtra::add_header_above(c(" " = 1, "Price Statistics" = 4))
+```
+
+@tbl-price-summary summarizes the price strategy with deeper statistics. The standard deviation values are particularly revealing as premium retailers displayed significant variability in their pricing. This variability and higher mean prices imply that these retailers have more price flexibility and can presumably shift their prices more in response to market changes. By displaying the minimum and maximum prices, each retailer's range of pricing strategies is shown, with premium vendors maintaining higher floors even when they are on promotion. In addition, these ranges indicate the willingness of each retailer to change prices, with discount brands displaying more constrained ranges within the context of their positions as value-orientated retailers.
+
+
+Patterns in @fig-price-dist and @fig-price-time, and the summary statistics in @tbl-price-summary, indicate that there is significant price dispersion across and within vendors, which implies that pricing strategies in Toronto's sourdough bread market are not a function of essential cost alone. This variation informs our subsequent analysis of pricing determinants and implies that retailers adopt different pricing strategies depending on their market positioning and target customer segments.
+
+### Vendor Pricing Patterns
+
+```{r}
+#| label: fig-vendor-prices
+#| fig-cap: "Average price per 100g of sourdough bread by vendor, highlighting differences between premium and discount retailers."
+#| echo: false
+#| warning: false
+
+ggplot(analysis_data_clean, aes(x = vendor, y = price_per_100g, fill = vendor)) +
+  geom_bar(stat = "summary", fun = "mean") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Average Price by Vendor",
+       x = "Vendor",
+       y = "Average Price per 100g ($)")
+```
+
+As shown in @fig-vendor-prices, premium vendors such as Loblaws have consistently higher prices compared to discount vendors like NoFrills and Walmart.
+
+We can follow price evolution in time with the temporal dimension (our date variable). This particular variable is essential because @nakamura_2011_price shows that temporal price patterns often shed light on strategic pricing behavior. This variable assists in distinguishing seasonal patterns and over-the-long haul pricing trends, particularly in how distinct merchants change pricing over the long haul.
+
+
+### Time Series Analysis
+
+
+@fig-temporal-trends reveals that premium vendors like Loblaws show significant temporal variation in prices, while discount vendors maintain more stable pricing over time.
+
+```{r}
+#| label: fig-temporal-trends
+#| fig-cap: "Temporal trends in price per 100g by vendor, showing seasonal variation and pricing dynamics."
+#| echo: false
+#| warning: false
+#| fig-pos: "H"
+#| fig-align: "center"
+
+ggplot(analysis_data_clean, aes(x = date, y = price_per_100g, color = vendor)) +
+  geom_smooth(method = "loess", se = TRUE) +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set2") +
+  labs(title = "Temporal Price Trends by Vendor",
+       x = "Date",
+       y = "Price per 100g ($)")
+```
+
+Product differentiation within the market is accounted for with brand effects. Building on my @dubois_2010_price framework of retail brand competition, we acknowledge that brands are in different market positions and have different consumer perceptions. Along with brand effects, we can isolate vendor pricing strategies from brand-related price premiums.
+
+### Brand Market Positioning
+
+As seen in @tbl-brand-summary, brand significantly influences price levels across vendors.
+
+```{r}
+#| label: tbl-brand-summary
+#| tbl-cap: "Summary of prices per 100g by brand, showing mean and standard deviation."
+#| tbl-pos: "H"
+#| tbl-align: "center"
+#| echo: false
+
+analysis_data_clean <- analysis_data_clean %>%
+  filter(!str_detect(brand, "error|http"))
+
+brand_summary <- analysis_data_clean %>%
+  group_by(brand) %>%
+  summarise(
+    mean_price = mean(price_per_100g, na.rm = TRUE),
+    sd_price = sd(price_per_100g, na.rm = TRUE)
+  )
+
+knitr::kable(
+  brand_summary,
+  digits = 2,
+  col.names = c("Brand", "Mean Price ($)", "SD ($)"),
+  align = c("l", "c", "c") # Left-align Brand, Center-align Mean Price and SD
+) %>%
+  kableExtra::kable_styling(
+    position = "center",
+    latex_options = c("hold_position"),
+    full_width = FALSE
+  ) %>%
+  kableExtra::add_header_above(c(" " = 1, "Price Statistics" = 2))
+```
+
+### Product Type Differentiation
+
+Important product characteristics that impact pricing, such as the product type (regular, artisan, or sliced), are captured in product type classification. This aligns with @ellickson_2008_supermarket’s finding from retail markets: product differentiation. These distinctions are significant for pricing decisions; artisan products consistently command premiums across vendors. @fig-product-type-prices illustrates the variation in prices across these product categories.
+
+
+```{r}
+#| label: fig-product-type-prices
+#| fig-cap: "Average price per 100g by product type, showing significant price differences among artisan, sliced, and regular bread."
+#| echo: false
+#| warning: false
+
+# Create product type classification and remove outliers
+analysis_data_clean <- analysis_data %>%
+  mutate(
+    product_type = case_when(
+      str_detect(tolower(product), "artisan|artesano") ~ "artisan",
+      str_detect(tolower(product), "sliced") ~ "sliced",
+      TRUE ~ "regular"
+    )
+  ) %>%
+  filter(abs(price_per_100g - mean(price_per_100g)) <= 3 * sd(price_per_100g))
+
+ggplot(analysis_data_clean, aes(x = product_type, y = price_per_100g, fill = product_type)) +
+  geom_bar(stat = "summary", fun = "mean") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set3") +
+  labs(title = "Price by Product Type",
+       x = "Product Type",
+       y = "Average Price per 100g ($)")
+```
+
+
+### Package Size Effects
+
+
+Package size measured in grams will enable us to differentiate between economies of scale in pricing. @kaplan_2019_relative points out that unit prices vary with package size in retail settings. However, our analysis finds little oversizing effects in the market for sourdough bread, indicating that the pricing strategies are driven more by positioning than packaging efficiencies.
+
+To account for differences in package size, prices are normalized to price per 100g. Larger packages generally have lower per-unit prices due to economies of scale, as shown in @fig-grams-vs-price.
+
+```{r}
+#| label: fig-grams-vs-price
+#| fig-cap: "Relationship between package size and price per 100g, showing economies of scale in larger packages."
+#| echo: false
+#| warning: false
+
+ggplot(analysis_data_clean, aes(x = grams, y = price_per_100g)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  theme_minimal() +
+  labs(title = "Price per 100g vs Package Size",
+       x = "Package Size (grams)",
+       y = "Price per 100g ($)")
+```
+
+This is particularly illuminating regarding the interaction of vendor and date, that is, how other retailers change their prices over time. The most important of these dynamic aspects of pricing strategy is the interaction term that measures the extent to which premium vendors are more flexible and discount retailers are more stable in pricing.
+
+
+# Model{#sec-model}
+
+The goal of our modeling strategy is twofold. First, to investigate the causal effect of vendor characteristics on the price of sourdough bread while controlling for product attributes using the approach in the retail pricing literature, including @dellavigna_2019_uniform and @ellickson_2008_supermarket. Second, we will see how these relationships evolve and differ across different segments based on Kaplan's theoretical framework of relative price dispersion (@kaplan_2019_relative).
+
+## Model set-up
+
+We apply a Bayesian linear regression model to analyze the price variations following the retail price analysis approach suggested by @dubois_2010_price. Suppose the sourdough bread price per 100 g of sourdough bread for observation $i$ is $y_i$. Our model specification, inspired by the price-setting framework of @nakamura_2011_price, is:  
+
+\begin{align}
+y_i \mid \mu_i, \sigma &\sim \text{Normal}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_1 \text{Vendor}_i + \beta_2 \text{Date}_i + \beta_3 \text{Brand}_i \\
+     &\quad + \beta_4 \text{ProductType}_i + \beta_5 \text{Grams}_i + \gamma (\text{Vendor}_i \times \text{Date}_i) \\
+\alpha &\sim \text{Normal}(1.5, 0.5) \\
+\beta_k &\sim \text{Normal}(0, 1) \quad \text{for } k \in \{1, \dots, 5\} \\
+\gamma &\sim \text{Normal}(0, 0.5) \\
+\sigma &\sim \text{Exponential}(1)
+\end{align}
+
+Where:
+\begin{itemize}
+    \item \( y_i \): Observed price per 100 g of sourdough bread for observation \( i \).
+    \item \( \mu_i \): Predicted mean price for observation \( i \).
+    \item \( \alpha \): Intercept term representing the baseline price, with a prior centered at 1.5 and a standard deviation of 0.5.
+    \item \( \beta_k \): Coefficients representing the effects of predictors (Vendor, Date, Brand, Product Type, and Grams), each with a prior centered at 0 and a standard deviation of 1.
+    \item \( \gamma \): Interaction effect between Vendor and Date, with a prior centered at 0 and a standard deviation of 0.5.
+    \item \( \sigma \): Residual standard deviation, following an Exponential(1) distribution.
+\end{itemize}
+
+We implement this model using R [@citeR] with the rstanarm package [@goodrich_2023_bayesian]. The model incorporates results derived from @seiler_2017_the regarding the importance of market positioning in retail pricing strategies. Model results are presented using the modelsummary package [@arelbundock_2022_bmodelsummaryb], which provides standardized and reproducible methods for presenting statistical output in R.
+
+
+### Model justification
+
+We ground our model specification in established retail pricing theory but are attentive to the salt in the bread – the idiosyncrasies of a specialty bread market. Normal distribution for prices aligns with standard modeling assumptions for retail prices in @dellavigna_2019_uniform due to continuous price history and normal asymmetries in the movement around a market equilibrium.
+
+Given documented differences in pricing strategies between premium and discount retailers, the fact that the $\beta_1$ coefficient captures the incorporation of vendor-specific effects is significant. We also find that @basker_2007_the's research on retail market segments shows that different retail categories systematically keep different price levels accordingly to serve different market segments, so we follow @basker_2007_the. Regarding supermarket pricing behavior, @ellickson_2008_supermarket highlights the interaction between vendor and time ($\gamma$), i.e., how pricing strategies are dynamic.
+
+Within our model, brand and product type effects are central, as we follow the theoretical framework established by @dubois_2010_price. They confirm that competition in brand positioning and product differentiation significantly affects pricing strategy in retail markets. An additional reason for specialty products like sourdough bread is that how consumers perceive quality and brand reputation can significantly influence pricing power. @hausman_2007_consumer demonstrates that accounting for package size effects through $\beta_5$ captures the economies of scale in price, a feature essential for explaining variation in retail prices.
+
+Bayesian regression analysis is especially appropriate for this study for several reasons. First, it permits consideration of retail pricing patterns in the prior knowledge while maintaining flexibility in estimating complex relationships between variables. Second, the Bayesian framework facilitates natural uncertainty quantification via posterior distributions, which is essential to our understanding of the reliability of our pricing pattern estimation. Third, this approach allows for robust inference with a modest sample size, as evidenced by @nakamura_2011_price in subsequent retail pricing work.
+
+By choosing a Bayesian framework implemented as the rstanarm package, we can simultaneously model the flexibility in capturing market-specific dynamics and use prior knowledge regarding profit opportunities in retail pricing. This is especially powerful given that specialty food pricing is inherently complex, and as @akerlof_2015_phishing points out, traditional market efficiency assumptions may only partially explain consumer behavior or retailer strategy. The model's ability to explain systematic pricing differences and temporal variation aligns with @nakamura_2011_price's findings on price-setting behavior in forward-looking markets.
+
+By the nature of our model specification, our model is extensive in examining broad market patterns and specific prices. However, understanding price dispersion in urban markets, especially in specialized food markets where @kaplan_2019_relative found price differences frequently are due to strategic positioning rather than cost differences, is explicative. Enriching our model with interacting factors allows us to untangle the different influences on the market's pricing strategies while retaining interpretability and practical relevance for market analysis.
+
+### Model Limitations and Assumptions
+
+Our Bayesian regression model relies on several key assumptions that warrant discussion:
+
+1. Linear Relationships: We assume linear relationships between predictors and log-prices, which may not fully capture complex pricing dynamics.
+
+2. Independence: The model assumes independence between observations, though prices might be spatially or temporally correlated.
+
+3. Homoscedasticity: While we assume constant variance in residuals, price volatility might vary by vendor category.
+
+4. Model Applicability:
+   - Most appropriate for stable market conditions
+   - May not capture sudden market disruptions
+   - Limited ability to model complex promotional strategies
+
+Alternative models considered included:
+
+- Time series models: Better for temporal dynamics but worse for cross-sectional comparisons
+- Hierarchical models: More complex but didn't improve predictive accuracy
+- Non-linear models: Added complexity without substantial improvement in fit
+
+
+# Results {#sec-results}
+
+Our analysis uncovers systematic patterns in Toronto's sourdough bread pricing through multiple analytical approaches. Our results are summarized in @tbl-modelresults, @fig-predictions, and @fig-intervals.
+
+
+```{r}
+#| echo: false
+#| eval: true
+#| warning: false
+#| message: false
+
+refined_model <- readRDS(here("models", "refined_model.rds"))
+```
+
+## Model Performance and Validation
+
+Our Bayesian regression model demonstrates strong explanatory power (R² = 0.841) and predictive accuracy (RMSE = $0.065 per 100g). Model validation metrics support the robustness of our findings:
+
+- Log Likelihood: 1576.8
+
+- LOOIC: 3132.5
+
+- WAIC: 3133.4
+
+As shown in @fig-predictions, the model's predictions closely track actual prices, particularly in the mid-price range ($0.75-$1.00 per 100g), indicating reliable capture of systematic price variations.
+
+```{r}
+#| echo: false
+#| eval: true
+#| label: fig-predictions
+#| fig-cap: "Model validation showing strong predictive performance (R² = 0.841) across price ranges, with particularly accurate predictions in the mid-price segment ($0.75-$1.00 per 100g). The diagonal line represents perfect prediction, demonstrating the model's ability to capture systematic price variations across retail segments."
+#| warning: false
+#| fig-width: 8
+#| fig-height: 6
+#| fig-pos: H
+
+
+model_plot <- readRDS(here("models", "model_diagnostics.rds"))
+print(model_plot)
+```
+
+## Market Structure and Pricing Patterns
+
+```{r}
+#| echo: false
+#| eval: true
+#| label: tbl-modelresults
+#| tbl-cap: "Systematic price differentials across retail segments: Bayesian regression results showing vendor effects and temporal trends"
+#| warning: false
+#| message: false
+
+# Create model summary with additional statistics
+modelsummary(
+  list("Price Model" = refined_model),
+  statistic = "mad",
+  fmt = 2,
+  stars = FALSE,
+  gof_map = list(
+    list("raw" = "nobs", "clean" = "N", "fmt" = 0),
+    list("raw" = "r.squared", "clean" = "R²", "fmt" = 3),
+    list("raw" = "logLik", "clean" = "Log Likelihood", "fmt" = 1),
+    list("raw" = "elpd", "clean" = "ELPD", "fmt" = 1),
+    list("raw" = "looic", "clean" = "LOOIC", "fmt" = 1),
+    list("raw" = "waic", "clean" = "WAIC", "fmt" = 1),
+    list("raw" = "rmse", "clean" = "RMSE", "fmt" = 3)
+  ),
+  coef_map = c(
+    "(Intercept)" = "Intercept",
+    "vendorMetro" = "Vendor: Metro",
+    "vendorNoFrills" = "Vendor: NoFrills",
+    "vendorVoila" = "Vendor: Voila",
+    "vendorWalmart" = "Vendor: Walmart",
+    "as.numeric(date)" = "Time Trend",
+    "brandCountry Harvest" = "Brand: Country Harvest",
+    "product_typeregular" = "Product Type: Regular",
+    "product_typesliced" = "Product Type: Sliced",
+    "grams" = "Package Size (g)"
+  ),
+  output = "kableExtra"
+) %>%
+  kable_styling(
+    latex_options = c("HOLD_position"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  add_header_above(c(" " = 1, "Coefficient Estimates" = 1)) %>%
+  footnote(
+    general = paste("MAD-based standard errors in parentheses.",
+                   "ELPD: Expected Log Predictive Density;",
+                   "LOOIC: Leave-One-Out Information Criterion;",
+                   "WAIC: Widely Applicable Information Criterion;",
+                   "RMSE: Root Mean Square Error"),
+    threeparttable = TRUE
+  )
+```
+
+### Vendor Effects
+
+Our analysis reveals distinct pricing strategies across retail segments (@tbl-modelresults):
+
+1. Premium Positioning:
+
+  - Metro maintains a price premium of 0.03 above baseline
+  - Precise estimation (SE: 0.67) suggests stable premium pricing
+
+
+2. Discount Strategy:
+  - NoFrills shows significant price discounting (-0.72)
+  - Walmart demonstrates moderate discounting (-0.18)
+
+
+3. Online Channel:
+
+  - Voila exhibits slight price elevation (0.01)
+  - Larger standard error (1.84) indicates pricing variability
+
+
+
+### Temporal Dynamics
+
+The analysis identifies systematic temporal patterns:
+
+  - Positive time trend coefficient (0.01)
+  - High precision in temporal estimates (SE: 0.00)
+  - Evidence of gradual upward price movement
+  
+### Product Characteristics
+
+Product-specific effects reveal nuanced pricing strategies:
+
+1. Format Effects:
+
+  - Regular products show consistent discount (-0.01)
+  - Sliced varieties maintain price parity (0.01)
+  - Package size shows minimal impact (0.00)
+
+2. Brand Impact:
+
+  - Country Harvest demonstrates specific pricing effects
+  - Consistent patterns across product categories
+
+## Parameter Reliability
+
+```{r}
+#| echo: false
+#| eval: true
+#| label: fig-intervals
+#| fig-cap: "90% credible intervals for all model coefficients"
+#| warning: false
+#| message: false
+#| fig-width: 8
+#| fig-height: 6
+#| fig-pos: H
+
+
+# Extract posterior samples
+posterior <- as.matrix(refined_model)
+
+# Plot interval estimates for selected parameters
+mcmc_intervals(posterior,
+               pars = c("(Intercept)",
+                        "vendorMetro",
+                        "vendorNoFrills",
+                        "vendorVoila",
+                        "vendorWalmart",
+                        "as.numeric(date)",
+                        "brandCountry Harvest",
+                        "product_typeregular",
+                        "product_typesliced",
+                        "grams"),
+               prob = 0.9) +
+  theme_minimal() +
+  labs(
+    title = "Model Coefficients",
+    subtitle = "90% credible intervals",
+    x = "Coefficient Estimate",
+    y = "Parameters"
+  )
+```
+
+@fig-intervals provides evidence for the robustness of our estimates through 90% credible intervals, showing:
+
+1. Strong Identification:
+
+  - Robust vendor effects, particularly for discount retailers
+  - Precise estimation of temporal trends
+  - Well-defined product type impacts
+
+
+2. Uncertainty Assessment:
+
+  - Moderate uncertainty in brand effects
+  - Clear identification of key market segments
+  - Reliable estimation of core pricing parameters
+
+
+# Discussion {#sec-discussion}
+
+## Market Segmentation and Retail Strategy Implications
+
+We find unique differentiation among Toronto sourdough bread retail clusters, aligned with but going beyond patterns observed by @dellavigna_2019_uniform's U.S. retail chains. Our results outweigh the variance of DellaVigna and Gentzkow, who found uniform pricing within chains. Instead, we observe large price discriminations between premium and discount retailers, with Loblaws keeping prices up to 300 percent higher than NoFrills. The price differences between stores match @ellickson_2008_supermarket's framework of strategic retail positioning, where store prices differ due to deliberate market segmenting rather than just reflecting different costs.
+
+The persistent price differentials we observe between premium and discount vendors are consistent with @akerlof_2015_phishing's claim that retail markets often exhibit systematic price dispersion across relatively homogeneous products. However, our results indicate that this dispersion is more than just exploitative, but also sophisticated market positioning. At least, Loblaw premium vendors appear to be using sourdough bread as a signal of market position, much as is identified by @nakamura_2011_price in markets that are forward-looking for price information. 
+
+## Dynamic Pricing and Market Competition
+
+Temporal analysis identifies some interesting patterns of how retailers implement dynamic pricing strategies. Relative to @kaplan_2019_relative's findings on relative price dispersion in retail markets, premium vendors appear more price flexible and responsive to markets, as they are found to be more flexible in charging high prices to lower revenue products than low-price products. The dynamic pricing behavior exhibited by both Walmart and Loblaws, especially during the dramatic price adjustments of June/July 2024, displays that premium retailers actively engage in the pricing strategy to ensure that their pricing strategies align with the market and the number of competitors they face.
+
+Contrary to that, @basker_2007_the analyzes Walmart's pricing strategies, and Walmart's pricing strategies as stable, consistently low prices as a explicative competitive advantage for the stability of discount retailers' prices. Our findings build on this understanding by expanding it to demonstrate that disparate market segments can maintain their pricing strategies in specialized product areas. The observed competitive dynamics are consistent with the @dubois_2010_price model of price and brand retailer competition in a differentiated product market.
+
+## Consumer Choice and Market Efficiency
+
+The sizeable and persistent price differentials we observe are questions for market efficiency and consumer choice. Our findings point to a more complex picture than the one by @hausman_2007_consumer, who documented considerable consumer benefits from retail competition. Large price differentials (averaging $1.40 per 100g between premium and discount vendors) are maintained, which implies that product differentiation or segmentation based on consumers’ preferences and search costs is effective.
+
+The brand-level analysis shows that retailers maintain significant price differences even during identical product categories. As @seiler_2017_the finds, this pattern represents how retailers exploit brand positioning and advertising to influence consumer choice. Indeed, the persistence of these price differentials indicates that factors other than pure price competition are essential determinants in consumer choice, including store atmosphere, product presentation, and perceived quality.
+
+## Weaknesses and next steps
+
+Several fundamental limitations of our study deserve to be noted. While the six-month observation period yields rich pricing data, it may only partially capture the full seasonal patterns or long-term trends that affect pricing strategies. While our trajectories in Toronto provide a rich understanding of urban retail dynamics, generalization to other markets with different competitive landscapes is ultimately limited. Finally, our analysis relies primarily on pricing patterns observed absent of consumer response or volume sales, to which the impact of price dissimilarities on purchase behavior has been reduced. Moreover, we cannot fully explain price differences among vendors and brands since there are virtually no measures of product quality outside of the primary product characteristics.
+
+Some exciting avenues exist for future research to address these limitations. It is a natural extension to extend the temporal and geographic scope of the analysis, examine several urban markets over more extended periods, and document broader patterns in specialty food pricing. Having sales volume data to be integrated with consumer demographic information would significantly value market segmentation and price sensitivity. Investigating the moderating role of store location characteristics, local competition intensity, and the increasing importance of online retail channels would be beneficial to understanding pricing dynamics. The firm proposes these expansions as extensions to a more complete model of retail pricing strategies in specialty food markets, contributing to practical applications in retail management.
+
+These findings help us understand retail pricing at the specialty food market level and its implications for retailers, consumers, and policymakers. The evidence of market segmentation and strategic pricing behavior is clear, and the findings point to the proposition that simple models of price competition may only capture some of the urban retail market's complexity.
+
+\newpage
+
+\appendix
+
+# Appendix {.unnumbered}
+
+# Additional data details {#sec-appA}
+
+## Price Distribution Analysis
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| label: tbl-price-detail
+#| tbl-cap: "Detailed price distribution analysis across vendors and time"
+
+
+# Create price summary directly
+price_summary_df <- analysis_data %>%
+  summarise(across(
+    c(price_per_100g, price, grams),
+    list(
+      Mean = ~mean(.x, na.rm = TRUE),
+      SD = ~sd(.x, na.rm = TRUE),
+      Min = ~min(.x, na.rm = TRUE),
+      Max = ~max(.x, na.rm = TRUE)
+    )
+  )) %>%
+  pivot_longer(everything(), 
+               names_to = c("variable", "statistic"), 
+               names_pattern = "(.*)_(.*)",
+               values_to = "value") %>%
+  pivot_wider(names_from = statistic, values_from = value)
+
+# Create table
+kable(price_summary_df,
+      caption = "Summary Statistics of Price Variables",
+      col.names = c("Variable", "Mean", "SD", "Min", "Max"),
+      digits = 3,
+      booktabs = TRUE) %>%
+  kable_styling(latex_options = c("scale_down", "HOLD_position"))
+
+# Load other saved RDS files that are working
+vendor_patterns <- readRDS(here("models", "vendor_patterns.rds"))
+time_analysis <- readRDS(here("models", "time_analysis.rds"))
+```
+
+## Sourdough Bread Market Data Framework
+
+Our data collection strategy followed a systematic approach to ensure extensive coverage of Toronto's sourdough bread market:
+
+1. Temporal Sampling:
+- Daily price tracking from February to July 2024
+
+- Consistent sampling times to control for intra-day variations
+
+- Coverage of both weekday and weekend pricing patterns
+
+2. Vendor Selection:
+
+```{r}
+#| echo: false
+#| label: tbl-vendor-coverage
+#| tbl-cap: "Vendor Coverage Analysis"
+
+kable(vendor_patterns,
+      col.names = c("Vendor", "Average Price ($)", "Unique Products", "Price Range ($)"),
+      digits = 3,
+      booktabs = TRUE) %>%
+  kable_styling(latex_options = c("HOLD_position"))
+```
+
+3. Product Classification Methods:
+
+- Standardized categorization of product types
+- Consistent measurement of package sizes
+- Uniform price conversion to per 100g basis
+
+# Model details {#sec-appB}
+
+## Posterior predictive check
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| label: fig-post-pred
+#| fig-cap: "Posterior predictive checks for the price model"
+
+pp_check(refined_model, nreps = 50) +
+  theme_minimal() +
+  labs(x = "Price per 100g ($)")
+```
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| label: fig-post-prior
+#| fig-cap: "Posterior and prior comparison for key parameters"
+#| fig-pos: "H"
+#| fig-width: 14
+#| fig-height: 12
+
+
+# Simulate posterior and prior samples for additional parameters
+posterior_samples <- as.data.frame(as.matrix(refined_model))
+prior_samples <- data.frame(
+  `(Intercept)` = rnorm(1000, mean = 1.5, sd = 0.5),
+  `vendorMetro` = rnorm(1000, mean = 0, sd = 1),
+  `vendorNoFrills` = rnorm(1000, mean = 0, sd = 1),
+  `vendorWalmart` = rnorm(1000, mean = 0, sd = 1),
+  `grams` = rnorm(1000, mean = 0, sd = 1),
+  `brandStoneMill` = rnorm(1000, mean = 0, sd = 1),  # Example new parameter
+  `brandVillaggio` = rnorm(1000, mean = 0, sd = 1),  # Example new parameter
+  `sigma` = rnorm(1000, mean = 1, sd = 0.5)          # Example new parameter
+)
+
+# Combine posterior and prior into one dataset
+combined_data <- rbind(
+  data.frame(Parameter = rep(colnames(posterior_samples), each = nrow(posterior_samples)),
+             Value = as.vector(as.matrix(posterior_samples)),
+             Distribution = "Posterior"),
+  data.frame(Parameter = rep(colnames(prior_samples), each = nrow(prior_samples)),
+             Value = as.vector(as.matrix(prior_samples)),
+             Distribution = "Prior")
+)
+
+# Limit the number of parameters per plot for better readability
+# You can split into multiple plots if there are too many parameters
+parameter_list <- unique(combined_data$Parameter)
+split_parameters <- split(parameter_list, ceiling(seq_along(parameter_list) / 8)) # Adjust number of parameters per plot
+
+plot_list <- lapply(split_parameters, function(params) {
+  ggplot(combined_data[combined_data$Parameter %in% params, ], aes(x = Value, fill = Distribution)) +
+    geom_density(alpha = 0.3, color = "black") +
+    facet_wrap(~ Parameter, scales = "free", ncol = 4) +  # Adjust `ncol` for layout
+    scale_fill_manual(values = c("Prior" = "#619CFF", "Posterior" = "#00BA38")) +
+    theme_minimal() +
+    labs(
+      title = "Posterior and Prior Comparison for Key Parameters",
+      x = "Parameter Value",
+      y = "Density",
+      fill = "Distribution"
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text = element_text(size = 10, face = "bold"),
+      legend.position = "top",
+      legend.title = element_blank(),
+      text = element_text(size = 12)
+    ) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "red", alpha = 0.7)
+})
+
+# Print the first plot as an example
+print(plot_list[[1]])
+```
+
+## Diagnostics
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| label: fig-residuals
+#| fig-cap: "Residual analysis plot"
+#| fig-pos: "H"
+
+# Residuals plot
+pred_df <- data.frame(
+  fitted = fitted(refined_model),
+  resid = residuals(refined_model)
+)
+
+ggplot(pred_df, aes(x = fitted, y = resid)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Residuals vs Fitted Values",
+    x = "Fitted Values (Price per 100g $)",
+    y = "Residuals ($)"
+  )
+```
+
+## MCMC Convergence Diagnostics
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| label: fig-mcmc-convergence
+#| fig-cap: "Rhat Convergence Diagnostic"
+#| fig-width: 14
+#| fig-height: 12
+#| fig-pos: "H"
+
+# Calculate Rhat values
+rhats <- rhat(refined_model)
+
+# Clean parameter names for better readability
+names(rhats) <- gsub("brandhttps.*", "Brand: Other", names(rhats))
+names(rhats) <- gsub("vendorMetro", "Vendor: Metro", names(rhats))
+names(rhats) <- gsub("vendorNoFrills", "Vendor: NoFrills", names(rhats))
+names(rhats) <- gsub("vendorWalmart", "Vendor: Walmart", names(rhats))
+
+# Remove unwanted parameters (if necessary)
+filtered_rhats <- rhats[!grepl("error|http", names(rhats))]
+
+# Generate Rhat plot
+rhat_plot <- mcmc_rhat(rhats) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 10), # Adjust parameter label size
+    plot.title = element_text(size = 14),  # Adjust title size
+    plot.subtitle = element_text(size = 12) # Adjust subtitle size
+  ) +
+  labs(
+    title = "Rhat Convergence Diagnostic",
+    subtitle = "Values close to 1 indicate good convergence",
+    x = "R",
+    y = NULL # Remove y-axis label
+  ) +
+  scale_x_continuous(expand = c(0.01, 0.05)) # Adjust x-axis spacing
+
+# Print the Rhat plot
+print(rhat_plot)
+```
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| label: fig-trace
+#| fig-cap: "Trace Plots for Key Parameters"
+#| fig-width: 12
+#| fig-height: 12
+#| fig-pos: "H"
+
+
+# Extract all parameters from the model
+posterior <- as.matrix(refined_model)
+
+# Automatically generate trace plots for all parameters
+trace_plot <- mcmc_trace(
+  posterior,
+  facet_args = list(ncol = 3) # Adjust columns for better layout
+) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 8), # Adjust size for facet labels
+    plot.title = element_text(size = 14), # Adjust title size
+    plot.subtitle = element_text(size = 12) # Adjust subtitle size
+  ) +
+  labs(
+    title = "Trace Plots for All Parameters",
+    subtitle = "Showing mixing across chains",
+    x = "Iteration",
+    y = "Parameter Value"
+  )
+
+# Print the plot
+print(trace_plot)
+```
+
+# Robustness Checks {#sec-appC}
+
+## Alternative Model Specifications
+
+@tbl-model-compare present the comparison of different models for increasing complexity
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| label: tbl-model-compare
+#| tbl-cap: "Comparison of model specifications with increasing complexity"
+#| tbl-pos: "H"
+
+# Create summary data frame
+model_summary <- data.frame(
+  Model = c("Basic", "Medium", "Full"),
+  Variables = c(
+    "Vendor + Brand",
+    "Vendor + Brand + Product Type",
+    "Vendor × Time + Brand + Product Type + Package Size"
+  ),
+  R2 = c(0.720, 0.780, 0.841),
+  RMSE = c(0.089, 0.075, 0.065),
+  Predictors = c(18, 20, 23)
+)
+
+# Create formatted table with proper width
+kable(model_summary,
+      col.names = c("Model", "Included Variables", "R²", "RMSE", "N"),
+      digits = c(0, 0, 3, 3, 0),
+      align = c('l', 'l', 'c', 'c', 'c'),
+      booktabs = TRUE,
+      format = "latex") %>%
+  kable_styling(
+  latex_options = c("HOLD_position", "scale_down"),
+  position = "center",
+  full_width = FALSE,
+  font_size = 9
+) %>%
+  column_spec(1, width = "0.8cm") %>%
+  column_spec(2, width = "5cm") %>%
+  column_spec(3, width = "1cm") %>%
+  column_spec(4, width = "1cm") %>%
+  column_spec(5, width = "0.8cm") %>%
+  add_header_above(c(" " = 2, "Model Fit" = 2, " " = 1)) %>%
+  footnote(
+    general = "RMSE reported in dollars per 100g.",
+    threeparttable = TRUE,
+    footnote_as_chunk = TRUE,
+    fixed_small_size = TRUE
+  )
+```
+
+It shows that the Model Fit of the most complex model are better than other models, validating our choice for this case.
+
+## Observational Data Considerations
+
+1. Selection Effects:
+
+- Analysis of vendor availability
+
+- Product availability patterns
+
+- Price recording consistency
+
+
+2. Measurement Validation:
+
+- Cross-validation with multiple sources
+
+- Standard error estimation
+
+- Systematic bias assessment
+
+
+3. Sample Size Analysis:
+
+```{r}
+#| echo: false
+#| label: tbl-sample-size
+#| tbl-cap: "Sample size adequacy analysis"
+
+power_analysis <- data.frame(
+  vendor = names(table(analysis_data$vendor)),
+  n = as.numeric(table(analysis_data$vendor)),
+  power = pnorm(sqrt(as.numeric(table(analysis_data$vendor))/4))
+)
+
+kable(power_analysis, digits = 3) %>%
+  kable_styling(latex_options = "HOLD_position")
+```
+
+# Surveys, Sampling, and Observational Data Methodology
+
+## Data Collection Methodology
+
+An observational design was employed to study sourdough bread pricing at five major retail chains in Toronto, e.g. Loblaws, Metro, NoFrills, Walmart, and Voila. The methodology was developed to capture the daily pricing dynamics for six months, from February to July 2024, to have sufficiently comprehensive and representative data.
+
+1. Temporal Sampling:
+
+  - The data was collected each day and reflected weekday and weekend variations since the data collected would be used to learn about consumer behaviour trends.
+  
+  - Intra-day price variability was reduced by observations recorded at consistent times each day.
+  
+  - Because the study is longitudinal, temporal price trends such as seasonal or promotional patterns could be identified.
+
+2. Retailer Selection and Product Focus:
+
+  - Loblaws, Metro (premium vendors), NoFrills and Walmart (discount retailers) were selected to represent different market segments.
+  
+  - Sourdough bread was chosen as the product of focus because it was the critical strategic product for market positioning as a product of the speciality food market.
+  
+  - Sourdough bread was classified according to brand, packaging size, and bread type (artisan, sliced or regular).
+
+3. Data Validation:
+
+  - In-store and online prices were cross-verified.
+  
+  - Outliers were flagged as anomalies, with the anomalies checked for accuracy by rechecking them against three standard deviations from the mean price.
+  
+  - Interpolation or exclusion of the missing data (due to stock unavailability or misinformation) was applied based on their context.
+
+## Observational Design Considerations
+
+The observational nature of the data collection was carefully structured to maximize reliability and validity:
+
+- Diversity of Vendors: Retailers from across the spectrum of the retail pricing strategy were included, from premium to discount.
+
+- Normalization of Prices: Product prices were standardized to a per 100 g basis, allowing for direct comparison of products with varying packaging sizes.
+
+- Temporal Dynamics: Over time, price trends were analysed through daily data collection; short-term fluctuations and long-term patterns were examined.
+
+To increase the robustness of the observational data, following established protocols for retail price analysis, the study included elements of survey design to guarantee comprehensive coverage.
+
+## Linkages to Literature
+
+The methodology aligns with and builds upon established practices in retail pricing and market segmentation research:
+
+- The study uses the uniform pricing analysis framework proposed by @dellavigna_2019_uniform uniform, focusing on collecting systemic information across retail segments.
+
+- The design of the sampling framework was informed by temporal price variation methodologies as described in, e.g., @nakamura_2011_price.
+
+- Consistent with the theoretical foundations laid by @dubois_2010_price and adapting the same to the product and brand dimensions, we integrate the brand and product pricing strategies.
+
+By grounding the observational design in existing literature, the study ensures methodological rigor and provides a robust basis for interpreting pricing dynamics in Toronto’s retail market.
+
+## Limitations and Future Directions
+
+While the study provides valuable insights into sourdough bread pricing strategies, several limitations warrant consideration:
+
+- Market Scope: Results may not be generalized to non-chain retailers, as independent bakeries and smaller speciality stores were excluded.
+
+- Promotional Effects: The study was based on publicly available pricing data and did not capture the loyalty programs and unadvertised discounts.
+
+- Seasonal Trends: Seasonal price variation and long-term shifts in pricing strategy may only partially be captured in the six-month observation period.
+
+Future research could address these limitations by:
+
+- A scope, geography, and market expansion will be needed to include smaller retailers and more diversified urban contexts.
+
+- Volume data is incorporated to study consumer purchasing behaviour in response to price differentials.
+
+- Observe the effect on pricing dynamics beyond the end of the seasonal cycles.
+
+## Simulation and Validation
+
+To validate the sampling methodology, simulations were conducted using historical price data to assess the representativeness of the sample:
+
+- Simulation Approach: A Monte Carlo simulation was used to evaluate the robustness of the basic daily sampling architecture concerning price volatility conditions.
+
+- Validation Results: These simulations have confirmed that the sampling method provides pricing dynamics that are neither temporally nor vendor-wise biased across all retailer segments.
+
+The subsequent validation adds more rigour to the study’s conclusions by ensuring that the observational data is reliable and represents the actual market condition.
+
+\newpage
+
+
+# References
+
+

@@ -1,0 +1,466 @@
+LLM: ChatGPT-4.
+Date: 26 November 2024
+
+
+User
+Help me generate the scripts from the flow of 00 to 07
+
+ChatGPT-4o
+Let's follow the script templates in order:
+
+Start with 00-simulate_data.R:
+
+library(tidyverse)
+library(here)
+
+set.seed(853)
+
+# Create directory if it doesn't exist
+dir.create(here("data", "00-simulated_data"), recursive = TRUE, showWarnings = FALSE)
+
+# Simulate data
+sim_data <- tibble(
+  date = seq(as.Date("2024-02-28"), as.Date("2024-07-05"), by="day"),
+  vendor = sample(c("Loblaws", "Metro", "NoFrills", "Walmart", "Voila"), 500, replace=TRUE),
+  price = rnorm(500, mean=4.50, sd=1),
+  grams = sample(c(450, 500, 550, 585, 650, 675, 800), 500, replace=TRUE),
+  price_per_100g = price/(grams/100)
+)
+
+# Add explicit type specification for date
+write_csv(sim_data, here("data", "00-simulated_data", "simulated_sourdough_prices.csv"))
+
+
+User
+Move to 01 for me
+
+ChatGPT-4o
+Let's create 01-test_simulated_data.R to test the simulated data's validity:
+library(tidyverse)
+library(here)
+library(testthat)
+
+# Read simulated data with type conversion
+sim_data <- read_csv(here("data", "00-simulated_data", "simulated_sourdough_prices.csv")) %>%
+  mutate(date = as.Date(date))
+
+# Test suite
+test_that("Simulated data structure is correct", {
+  # Data structure tests
+  expect_equal(ncol(sim_data), 5)
+  expect_equal(nrow(sim_data), length(seq(as.Date("2024-02-28"), as.Date("2024-07-05"), by="day")))
+  expect_true(all(c("date", "vendor", "price", "grams", "price_per_100g") %in% names(sim_data)))
+  
+  # Data type tests
+  expect_true(is.Date(sim_data$date))
+  expect_true(is.character(sim_data$vendor))
+  expect_true(is.numeric(sim_data$price))
+  expect_true(is.numeric(sim_data$grams))
+  expect_true(is.numeric(sim_data$price_per_100g))
+  
+  # Value range tests
+  expect_true(all(sim_data$vendor %in% c("Loblaws", "Metro", "NoFrills", "Walmart", "Voila")))
+  expect_true(all(sim_data$grams %in% c(450, 500, 550, 585, 650, 675, 800)))
+  expect_true(all(sim_data$price > 0))
+  expect_true(all(sim_data$price_per_100g > 0))
+  
+  # Calculation test
+  expect_equal(sim_data$price_per_100g, sim_data$price/(sim_data$grams/100))
+})
+
+
+User
+Move to 02 for me
+
+ChatGPT-4o
+library(tidyverse)
+library(here)
+
+# Create raw data directory
+dir.create(here("data", "01-raw_data"), recursive = TRUE, showWarnings = FALSE)
+
+# Save raw data (copy from provided data)
+raw_data <- tibble(
+  Date = as.Date(c("2024-02-28", "2024-02-28")), # Add your data
+  Vendor = c("Loblaws", "Metro"),
+  Product = c("Sourdough Loaf", "Sourdough Bread"),
+  Brand = c("Brand1", "Brand2"),
+  Price = c(3.99, 4.99),
+  Grams = c(450, 500),
+  `Price Per 100g` = c(0.89, 0.998)
+)
+
+write_csv(raw_data, here("data", "01-raw_data", "raw_sourdough_prices.csv"))
+
+
+User
+Move to 02 for me
+
+ChatGPT-4o
+#### Workspace setup ####
+library(tidyverse)
+library(here)
+
+raw_data <- read_csv(here("data", "01-raw_data", "data-aJhFM.csv"),
+                     col_types = cols(
+                       Date = col_date(),
+                       Vendor = col_character(),
+                       Product = col_character(),
+                       Brand = col_character(),
+                       Price = col_double(),
+                       Grams = col_double(),
+                       `Price Per 100g` = col_character()
+                     )) %>%
+  mutate(`Price Per 100g` = case_when(
+    `Price Per 100g` == "#DIV/0!" ~ NA_real_,
+    TRUE ~ as.numeric(`Price Per 100g`)
+  )) %>%
+  filter(!is.na(Date) & Brand != "Out of stock")
+
+# Save processed data
+write_csv(raw_data, here("data", "01-raw_data", "raw_sourdough_prices.csv"))
+
+
+User
+Move to 03 for me
+
+ChatGPT-4o
+The template needs adaptation for our sourdough price data. Here's the updated 03-clean_data.R:
+
+#### Workspace setup ####
+library(tidyverse)
+library(here)
+library(arrow)
+
+#### Clean data ####
+raw_data <- read_csv(here("data", "01-raw_data", "raw_sourdough_prices.csv"))
+
+cleaned_data <- raw_data %>%
+  janitor::clean_names() %>%
+  # Clean column names
+  rename(
+    price_per_100g = price_per_100g
+  ) %>%
+  # Remove any remaining NAs
+  drop_na() %>%
+  # Arrange by date
+  arrange(date)
+
+#### Save data ####
+write_parquet(cleaned_data, here("data", "02-analysis_data", "analysis_data.parquet"))
+Would you like me to add more cleaning steps for specific columns?
+
+User
+Move to 04 for me
+
+ChatGPT-4o
+#### Workspace setup ####
+library(tidyverse)
+library(testthat)
+library(arrow)
+
+analysis_data <- read_parquet(here("data", "02-analysis_data", "analysis_data.parquet"))
+
+#### Test data ####
+test_that("data structure is correct", {
+  expect_equal(ncol(analysis_data), 7)
+  expect_true(all(c("date", "vendor", "product", "brand", "price", "grams", "price_per_100g") %in% names(analysis_data)))
+})
+
+test_that("data types are correct", {
+  expect_type(analysis_data$date, "double") # Date stored as double
+  expect_type(analysis_data$vendor, "character")
+  expect_type(analysis_data$product, "character")
+  expect_type(analysis_data$brand, "character")
+  expect_type(analysis_data$price, "double")
+  expect_type(analysis_data$grams, "double")
+  expect_type(analysis_data$price_per_100g, "double")
+})
+
+test_that("no missing values in dataset", {
+  expect_true(all(!is.na(analysis_data)))
+})
+
+test_that("values are within valid ranges", {
+  expect_true(all(analysis_data$price > 0))
+  expect_true(all(analysis_data$grams > 0))
+  expect_true(all(analysis_data$price_per_100g > 0))
+})
+
+valid_vendors <- c("Loblaws", "Metro", "NoFrills", "Walmart", "Voila")
+test_that("vendor names are valid", {
+  expect_true(all(analysis_data$vendor %in% valid_vendors))
+})
+
+test_that("dates are within expected range", {
+  expect_true(all(analysis_data$date >= as.Date("2024-02-28")))
+  expect_true(all(analysis_data$date <= as.Date("2024-07-05")))
+})
+
+
+User
+Move to 05 for me
+
+ChatGPT-4o
+Here's 05-exploratory_data_analysis.R:
+#### Workspace setup ####
+library(tidyverse)
+library(arrow)
+library(lubridate)
+library(modelsummary)
+
+#### Read data ####
+analysis_data <- read_parquet(here("data", "02-analysis_data", "analysis_data.parquet"))
+
+#### Initial exploration ####
+# Summary statistics
+price_summary <- datasummary(
+  price_per_100g + price + grams ~ Mean + SD + Min + Max,
+  data = analysis_data
+)
+
+# Vendor patterns
+vendor_patterns <- analysis_data %>%
+  group_by(vendor) %>%
+  summarise(
+    avg_price = mean(price_per_100g),
+    products = n_distinct(product),
+    price_range = max(price_per_100g) - min(price_per_100g)
+  )
+
+# Time trends
+time_analysis <- analysis_data %>%
+  group_by(date) %>%
+  summarise(
+    daily_avg = mean(price_per_100g),
+    daily_sd = sd(price_per_100g)
+  )
+
+#### Save results ####
+saveRDS(price_summary, here("models", "price_summary.rds"))
+saveRDS(vendor_patterns, here("models", "vendor_patterns.rds"))
+saveRDS(time_analysis, here("models", "time_analysis.rds"))
+
+
+User
+Move to 06 for me
+
+ChatGPT-4o
+#### Workspace setup ####
+library(tidyverse)
+library(arrow)
+library(rstanarm)
+
+#### Read data ####
+analysis_data <- read_parquet(here("data", "02-analysis_data", "analysis_data.parquet"))
+
+# Create product type classification
+analysis_data <- analysis_data %>%
+  mutate(
+    product_type = case_when(
+      str_detect(tolower(product), "artisan|artesano") ~ "artisan",
+      str_detect(tolower(product), "sliced") ~ "sliced",
+      TRUE ~ "regular"
+    )
+  )
+
+# Remove outliers (prices > 3 SD from mean)
+price_mean <- mean(analysis_data$price_per_100g)
+price_sd <- sd(analysis_data$price_per_100g)
+analysis_data_clean <- analysis_data %>%
+  filter(abs(price_per_100g - price_mean) <= 3 * price_sd)
+
+### Model data ####
+refined_model <- stan_glm(
+  formula = price_per_100g ~ 
+    vendor * as.numeric(date) + 
+    brand + 
+    product_type + 
+    grams,
+  data = analysis_data_clean,
+  family = gaussian(),
+  prior = normal(location = 0, scale = 2.5, autoscale = TRUE),
+  prior_intercept = normal(location = 0, scale = 2.5, autoscale = TRUE),
+  prior_aux = exponential(rate = 1, autoscale = TRUE),
+  seed = 853
+)
+
+# Generate predictions
+predictions <- posterior_predict(refined_model)
+pred_df <- data.frame(
+  actual = analysis_data_clean$price_per_100g,
+  predicted = colMeans(predictions)
+)
+
+# Calculate performance metrics
+rmse <- sqrt(mean((pred_df$actual - pred_df$predicted)^2))
+r2 <- cor(pred_df$actual, pred_df$predicted)^2
+
+#### Model diagnostics ####
+model_plot <- ggplot(pred_df, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Model Predictions vs Actual Prices",
+    subtitle = sprintf("R² = %.3f, RMSE = $%.3f per 100g", r2, rmse),
+    x = "Actual Price per 100g ($)",
+    y = "Predicted Price per 100g ($)"
+  )
+
+#### Save outputs ####
+saveRDS(refined_model, here("models", "refined_model.rds"))
+saveRDS(model_plot, here("models", "model_diagnostics.rds"))
+saveRDS(list(rmse = rmse, r2 = r2), here("models", "performance_metrics.rds"))
+
+
+User
+Let me check the results to verify all the findings
+
+ChatGPT-4o
+# Model summary
+summary(refined_model)
+
+# Plot diagnostics
+plot(refined_model)
+
+# Print performance metrics
+print(paste("RMSE:", round(rmse, 3)))
+print(paste("R-squared:", round(r2, 3)))
+
+# Plot predictions
+print(model_plot)
+
+# Examine effects by vendor
+posterior_interval(refined_model, prob = 0.9) %>%
+ as.data.frame() %>%
+ rownames_to_column("parameter")
+This will show:
+
+Parameter estimates and significance
+Model diagnostics
+Fit metrics
+Prediction accuracy
+Uncertainty intervals for effects
+
+
+User
+can we move to 07 replication
+
+ChatGPT-4o
+#### Workspace setup ####
+library(tidyverse)
+library(arrow)
+library(modelsummary)
+
+#### Load data and models ####
+analysis_data <- read_parquet(here("data", "02-analysis_data", "analysis_data.parquet"))
+refined_model <- readRDS(here("models", "refined_model.rds"))
+ 
+#### Workspace setup ####
+library(tidyverse)
+library(arrow)
+library(modelsummary)
+library(scales)
+
+#### Load data and models ####
+analysis_data <- read_parquet(here("data", "02-analysis_data", "analysis_data.parquet"))
+refined_model <- readRDS(here("models", "refined_model.rds"))
+
+#### Replicate plots ####
+# 1. Improved vendor trends
+vendor_trends <- ggplot(analysis_data, aes(x = date, y = price_per_100g, color = vendor)) +
+  geom_smooth(method = "loess", se = TRUE, size = 1) +
+  geom_hline(yintercept = mean(analysis_data$price_per_100g), 
+             linetype = "dashed", alpha = 0.5) +
+  facet_wrap(~ vendor) +
+  scale_color_brewer(palette = "Set2") +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_y_continuous(labels = dollar_format()) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank(),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Sourdough Bread Price Trends by Vendor",
+    subtitle = "Dashed line shows overall mean price",
+    x = "Date",
+    y = "Price per 100g ($)"
+  )
+
+# 2. Improved brand comparison
+brand_summary <- analysis_data %>%
+  group_by(brand) %>%
+  summarise(
+    n = n(),
+    median_price = median(price_per_100g),
+    mean_price = mean(price_per_100g)
+  ) %>%
+  filter(n >= 10)  # Only brands with sufficient data
+
+# Create dataset for plotting
+plot_data <- analysis_data %>%
+  filter(brand %in% brand_summary$brand) %>%
+  mutate(brand = factor(brand, 
+                        levels = brand_summary$brand[order(brand_summary$median_price)]))
+
+brand_comparison <- ggplot(plot_data, aes(y = brand, x = price_per_100g)) +
+  geom_boxplot(outlier.color = "red", outlier.size = 1, alpha = 0.7) +
+  geom_point(data = brand_summary, 
+             aes(x = mean_price, y = brand),
+             color = "blue", size = 2) +
+  geom_text(data = brand_summary,
+            aes(x = max(analysis_data$price_per_100g), 
+                y = brand,
+                label = paste("n =", n)),
+            hjust = 1, size = 3) +
+  scale_x_continuous(labels = dollar_format()) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "Price Distribution by Brand",
+    subtitle = "Blue dots show mean prices, boxes show quartiles",
+    x = "Price per 100g ($)",
+    y = NULL
+  )
+
+
+# 3. Improved model predictions plot
+predictions <- posterior_predict(refined_model)
+pred_df <- data.frame(
+  actual = analysis_data_clean$price_per_100g,
+  predicted = colMeans(predictions)
+)
+
+rmse <- sqrt(mean((pred_df$actual - pred_df$predicted)^2))
+r2 <- cor(pred_df$actual, pred_df$predicted)^2
+
+model_fit <- ggplot(pred_df, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +
+  scale_x_continuous(labels = dollar_format()) +
+  scale_y_continuous(labels = dollar_format()) +
+  theme_minimal() +
+  labs(
+    title = "Model Predictions vs Actual Prices",
+    subtitle = sprintf("R² = %.3f, RMSE = $%.3f per 100g", r2, rmse),
+    x = "Actual Price per 100g ($)",
+    y = "Predicted Price per 100g ($)"
+  )
+
+#### Save replications ####
+saveRDS(list(vendor_trends = vendor_trends,
+             brand_comparison = brand_comparison,
+             model_fit = model_fit),
+        here("models", "replications.rds"))
+
+# Display plots
+print(vendor_trends)
+print(brand_comparison)
+print(model_fit)
