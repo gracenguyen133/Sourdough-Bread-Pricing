@@ -4,7 +4,7 @@
 
 This repo contains analysis of sourdough bread pricing patterns across major retailers in Toronto from February to July 2024. The analysis explores market segmentation and pricing strategies using Bayesian regression modeling.
 
-Click the green ìCodeî button, then ìDownload ZIPî to use this folder. After you finish downloading the folder, move it to the folder where you want to watch the project on your personal computer and edit as required.
+Click the green ‚ÄúCode‚Äù button, then ‚ÄúDownload ZIP‚Äù to use this folder. After you finish downloading the folder, move it to the folder where you want to watch the project on your personal computer and edit as required.
 
 ## File Structure
 
@@ -23,7 +23,7 @@ This project was developed with assistance from ChatGPT by OpenAI. The LLM was u
 -	Code formatting and optimization
 -	Data interpretation
 -	Model building
-The complete chat history is available in other/llm_usage/usage.txt.
+The complete chat history is available in `other/llm_usage/usage.txt`.
 
 ## Reproducibility
 
