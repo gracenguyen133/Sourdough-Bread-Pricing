@@ -2,9 +2,9 @@
 title: "Datasheet for Toronto Sourdough Bread Price Dataset'"
 subtitle: "Price Variations in Toronto's Sourdough Bread Market: Evidence from Major Retailers"
 author: 
-  - First author
+  - Grace Nguyen
 
-thanks: "Code and data are available at: "
+thanks: "Code and data are available at: https://github.com/gracenguyen133/Sourdough-Bread-Pricing.git"
 date: today
 date-format: long
 abstract: "This datasheet documents a comprehensive dataset of sourdough bread prices from major retailers in Toronto. The dataset spans February to July 2024, covering five major retail chains. It enables analysis of pricing patterns, market segmentation, and retail strategy in specialty food markets."
