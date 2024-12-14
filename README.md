@@ -21,15 +21,15 @@ The repo is structured as:
 
 This project was developed with assistance from ChatGPT by OpenAI. The LLM was used for:
 
--	Code formatting and optimization
--	Data interpretation
--	Model building
+-	Code formatting and optimization.
+-	Data interpretation.
+-	Model building.
 The complete chat history is available in `other/llm_usage/usage.txt`.
 
 ## Reproducibility
 
 All analyses can be reproduced by running the numbered scripts in sequence:
--	Run scripts 00-03 for data preparation
--	Run scripts 04-05 for analysis
--	Run scripts 06-07 for model fitting and validation
--	Render paper.qmd for final output
+-	Run scripts 00-03 for data preparation.
+-	Run scripts 04-05 for analysis.
+-	Run scripts 06-07 for model fitting and validation.
+-	Render paper.qmd for final output.
