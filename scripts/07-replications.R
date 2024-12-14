@@ -113,4 +113,3 @@ saveRDS(list(vendor_trends = vendor_trends,
 print(vendor_trends)
 print(brand_comparison)
 print(model_fit)
-
