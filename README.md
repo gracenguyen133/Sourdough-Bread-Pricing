@@ -24,6 +24,7 @@ This project was developed with assistance from ChatGPT by OpenAI. The LLM was u
 -	Code formatting and optimization.
 -	Data interpretation.
 -	Model building.
+  
 The complete chat history is available in `other/llm_usage/usage.txt`.
 
 ## Reproducibility
